@@ -1,6 +1,7 @@
 import http from 'http';
 import {EventEmitter} from "events";
 import Request from './Request.js';
+import Response from './Response.js';
 
 class Application {
     #emitter;
@@ -21,8 +22,9 @@ class Application {
         Object.keys(router.endpoints).forEach((path) => {
             const endpoint = router.endpoints[path];
             Object.keys(endpoint).forEach((method) => {
-                this.#emitter.on(this.#getRouteMask(path, method), async (nativeReq, res) => {
+                this.#emitter.on(this.#getRouteMask(path, method), async (nativeReq, nativeRes) => {
                     const req = new Request(nativeReq);
+                    const res = new Response(nativeRes);
                     try {
                         await req.parseBody();
                         for (const middleware of this.#middlewares) {
@@ -33,9 +35,7 @@ class Application {
                         }
                         await Promise.resolve(endpoint[method](req, res));
                     } catch (err) {
-                        res.statusCode = 500;
-                        res.setHeader('Content-Type', 'application/json');
-                        res.end(JSON.stringify({message: 'Internal Server Error', error: String(err && err.message || err)}));
+                       res.statusCode(500).send({error: err.message || 'Internal Server Error'});
                     }
                 });
             });
