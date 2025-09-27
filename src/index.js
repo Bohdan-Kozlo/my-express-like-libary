@@ -12,6 +12,10 @@ const router = new Router();
 const users = [{id: 1, name: "John"}, {id: 2, name: "Jane"}];
 
 router.get("/users", (req, res) => {
+    res.send(users);
+});
+
+router.get("/usersquery", (req, res) => {
     res.send(req.query);
 });
 

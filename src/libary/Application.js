@@ -2,20 +2,21 @@ import http from 'http';
 import {EventEmitter} from "events";
 import Request from './Request.js';
 import Response from './Response.js';
+import MiddlewareManager from './MiddlewareManager.js';
 
 class Application {
     #emitter;
     #server;
-    #middlewares;
+    #middlewareManager;
 
     constructor() {
         this.#emitter = new EventEmitter();
         this.#server = this.#createServer();
-        this.#middlewares = [];
+        this.#middlewareManager = new MiddlewareManager();
     }
 
     use(middleware) {
-        this.#middlewares.push(middleware);
+        this.#middlewareManager.use(middleware);
     }
 
     addRouter(router) {
@@ -27,13 +28,9 @@ class Application {
                     const res = new Response(nativeRes);
                     try {
                         await req.parseBody();
-                        for (const middleware of this.#middlewares) {
-                            const maybePromise = middleware(req, res);
-                            if (maybePromise && typeof maybePromise.then === 'function') {
-                                await maybePromise;
-                            }
-                        }
-                        await Promise.resolve(endpoint[method](req, res));
+                        await this.#middlewareManager.run(req, res, async (req, res) => {
+                            return await Promise.resolve(endpoint[method](req, res));
+                        });
                     } catch (err) {
                        res.statusCode(500).send({error: err.message || 'Internal Server Error'});
                     }

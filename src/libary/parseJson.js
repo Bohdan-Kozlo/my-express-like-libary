@@ -1,9 +1,11 @@
 
-function parseJson(req, res) {
+function parseJson(req, res, next) {
     res.send = (data) => {
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify(data));
+        res.nativeRes.end(JSON.stringify(data));
     }
+
+    next();
 }
 
 export default parseJson;
