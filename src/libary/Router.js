@@ -1,8 +1,10 @@
+import RouteMatcher from "./RouteMatcher.js";
+
 class Router {
     #endpoints;
 
     constructor() {
-        this.#endpoints = {};
+        this.#endpoints = [];
     }
 
     get endpoints() {
@@ -10,17 +12,14 @@ class Router {
     }
 
     request(method, path, handler) {
-        if (!this.#endpoints[path]) {
-            this.#endpoints[path] = {};
-        }
+        const matcher = new RouteMatcher(path);
 
-        const endpoint = this.#endpoints[path];
-
-        if (endpoint[method]) {
-            throw new Error(`Endpoint ${method} ${path} already exists`);
-        }
-
-        endpoint[method] = handler;
+        this.#endpoints.push({
+            method: method.toUpperCase(),
+            path,
+            matcher,
+            handler
+        });
     }
 
     get(path, handler) {

@@ -1,18 +1,20 @@
-import http from 'http';
-import {EventEmitter} from "events";
-import Request from './Request.js';
-import Response from './Response.js';
-import MiddlewareManager from './MiddlewareManager.js';
+import http from "http";
+import { EventEmitter } from "events";
+import Request from "./Request.js";
+import Response from "./Response.js";
+import MiddlewareManager from "./MiddlewareManager.js";
 
 class Application {
     #emitter;
     #server;
     #middlewareManager;
+    #routes;
 
     constructor() {
         this.#emitter = new EventEmitter();
         this.#server = this.#createServer();
         this.#middlewareManager = new MiddlewareManager();
+        this.#routes = [];
     }
 
     use(middleware) {
@@ -20,27 +22,22 @@ class Application {
     }
 
     addRouter(router) {
-        Object.keys(router.endpoints).forEach((path) => {
-            this.#registerRouteEndpoints(path, router.endpoints[path]);
-        });
-    }
+        router.endpoints.forEach((endpoint) => {
+            this.#routes.push(endpoint);
 
-    #registerRouteEndpoints(path, endpoint) {
-        Object.keys(endpoint).forEach((method) => {
-            const routeHandler = endpoint[method];
-            const eventName = this.#getRouteMask(path, method);
-            
-            this.#emitter.on(eventName, async (nativeReq, nativeRes) => {
-                await this.#handleRequest(nativeReq, nativeRes, routeHandler);
+            const eventName = this.#getRouteMask(endpoint.path, endpoint.method);
+            this.#emitter.on(eventName, async (nativeReq, nativeRes, params) => {
+                await this.#handleRequest(nativeReq, nativeRes, endpoint.handler, params);
             });
         });
     }
 
-    #handleRequest(nativeReq, nativeRes, routeHandler) {
-        return new Promise(async (resolve, reject) => {
+    #handleRequest(nativeReq, nativeRes, routeHandler, params = {}) {
+        return new Promise(async (resolve) => {
             const req = new Request(nativeReq);
+            req.params = params;
             const res = new Response(nativeRes);
-            
+
             try {
                 await this.#processRequest(req, res, routeHandler);
                 resolve();
@@ -68,12 +65,11 @@ class Application {
     #handleRequestError(res, error) {
         return new Promise((resolve) => {
             try {
-                res.status(500).send({error: error.message || 'Internal Server Error'});
+                res.status(500).send({ error: error.message || "Internal Server Error" });
                 resolve();
-            } catch (sendError) {
-                // Fallback if res.send fails
-                res.res.statusCode = 500;
-                res.res.end('Internal Server Error');
+            } catch {
+                res.nativeRes.statusCode = 500;
+                res.nativeRes.end("Internal Server Error");
                 resolve();
             }
         });
@@ -85,17 +81,26 @@ class Application {
 
     #createServer() {
         return http.createServer((req, res) => {
-            const pathOnly = (req.url || '').split('?')[0];
-            const emitted = this.#emitter.emit(this.#getRouteMask(pathOnly, req.method), req, res);
-            if (!emitted) {
-                res.statusCode = 404;
-                res.end(`Cannot ${req.method} ${req.url}`);
+            const pathOnly = (req.url || "").split("?")[0];
+            const method = req.method.toUpperCase();
+
+            for (const route of this.#routes) {
+                if (route.method !== method) continue;
+                const params = route.matcher.match(pathOnly);
+                if (params) {
+                    const eventName = this.#getRouteMask(route.path, method);
+                    this.#emitter.emit(eventName, req, res, params);
+                    return;
+                }
             }
-        })
+
+            res.statusCode = 404;
+            res.end(`Cannot ${method} ${req.url}`);
+        });
     }
 
     #getRouteMask(path, method) {
-        return `[${path}]:[${method}]`
+        return `[${path}]:[${method}]`;
     }
 }
 

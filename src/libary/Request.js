@@ -1,4 +1,4 @@
-import {parse as parseQueryString} from 'querystring';
+import { parse as parseQueryString } from "querystring";
 
 class Request {
     constructor(nativeReq) {
@@ -7,20 +7,22 @@ class Request {
         this.url = nativeReq.url;
         this.headers = nativeReq.headers || {};
         this.body = null;
-        this.rawBody = '';
+        this.rawBody = "";
+        this.params = {};
+
         const rawUrl = this.url;
-        const [pathOnly, queryString = ''] = rawUrl.split('?', 2);
-        this.path = pathOnly || '/';
+        const [pathOnly, queryString = ""] = rawUrl.split("?", 2);
+        this.path = pathOnly || "/";
         this.query = queryString ? parseQueryString(queryString) : {};
     }
 
     async parseBody() {
-        const method = (this.method || '').toUpperCase();
+        const method = (this.method || "").toUpperCase();
         if (!this.#canHaveBody(method)) return;
 
         if (this.#isEmptyBodyByContentLength()) {
             this.body = null;
-            this.rawBody = '';
+            this.rawBody = "";
             return;
         }
 
@@ -38,43 +40,43 @@ class Request {
     }
 
     #canHaveBody(method) {
-        return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+        return ["POST", "PUT", "PATCH", "DELETE"].includes(method);
     }
 
     #isEmptyBodyByContentLength() {
-        const contentLength = Number(this.headers['content-length'] || 0);
+        const contentLength = Number(this.headers["content-length"] || 0);
         return !Number.isNaN(contentLength) && contentLength === 0;
     }
 
     async #readRequestBody() {
         const chunks = [];
         await new Promise((resolve, reject) => {
-            this.native.on('data', chunk => chunks.push(Buffer.from(chunk)));
-            this.native.on('end', () => resolve());
-            this.native.on('error', err => reject(err));
+            this.native.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+            this.native.on("end", () => resolve());
+            this.native.on("error", (err) => reject(err));
         });
         const buffer = Buffer.concat(chunks);
-        const raw = buffer.toString('utf8');
+        const raw = buffer.toString("utf8");
         return { buffer, raw };
     }
 
     #getContentType() {
-        const contentTypeHeader = (this.headers['content-type'] || '').toString();
-        return contentTypeHeader.split(';')[0].trim().toLowerCase();
+        const contentTypeHeader = (this.headers["content-type"] || "").toString();
+        return contentTypeHeader.split(";")[0].trim().toLowerCase();
     }
 
     #parseBasedOnType(contentType, raw, buffer) {
-        if (contentType === 'application/json') {
+        if (contentType === "application/json") {
             this.body = raw.length ? JSON.parse(raw) : null;
             return;
         }
 
-        if (contentType === 'application/x-www-form-urlencoded') {
+        if (contentType === "application/x-www-form-urlencoded") {
             this.body = parseQueryString(raw);
             return;
         }
 
-        if (contentType === 'text/plain' || contentType.startsWith('text/')) {
+        if (contentType === "text/plain" || contentType.startsWith("text/")) {
             this.body = raw;
             return;
         }
