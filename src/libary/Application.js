@@ -21,22 +21,62 @@ class Application {
 
     addRouter(router) {
         Object.keys(router.endpoints).forEach((path) => {
-            const endpoint = router.endpoints[path];
-            Object.keys(endpoint).forEach((method) => {
-                this.#emitter.on(this.#getRouteMask(path, method), async (nativeReq, nativeRes) => {
-                    const req = new Request(nativeReq);
-                    const res = new Response(nativeRes);
-                    try {
-                        await req.parseBody();
-                        await this.#middlewareManager.run(req, res, async (req, res) => {
-                            return await Promise.resolve(endpoint[method](req, res));
-                        });
-                    } catch (err) {
-                       res.statusCode(500).send({error: err.message || 'Internal Server Error'});
-                    }
-                });
+            this.#registerRouteEndpoints(path, router.endpoints[path]);
+        });
+    }
+
+    #registerRouteEndpoints(path, endpoint) {
+        Object.keys(endpoint).forEach((method) => {
+            const routeHandler = endpoint[method];
+            const eventName = this.#getRouteMask(path, method);
+            
+            this.#emitter.on(eventName, async (nativeReq, nativeRes) => {
+                await this.#handleRequest(nativeReq, nativeRes, routeHandler);
             });
-        })
+        });
+    }
+
+    #handleRequest(nativeReq, nativeRes, routeHandler) {
+        return new Promise(async (resolve, reject) => {
+            const req = new Request(nativeReq);
+            const res = new Response(nativeRes);
+            
+            try {
+                await this.#processRequest(req, res, routeHandler);
+                resolve();
+            } catch (err) {
+                await this.#handleRequestError(res, err);
+                resolve();
+            }
+        });
+    }
+
+    #processRequest(req, res, routeHandler) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                await req.parseBody();
+                await this.#middlewareManager.run(req, res, async (req, res) => {
+                    return await Promise.resolve(routeHandler(req, res));
+                });
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
+    }
+
+    #handleRequestError(res, error) {
+        return new Promise((resolve) => {
+            try {
+                res.status(500).send({error: error.message || 'Internal Server Error'});
+                resolve();
+            } catch (sendError) {
+                // Fallback if res.send fails
+                res.res.statusCode = 500;
+                res.res.end('Internal Server Error');
+                resolve();
+            }
+        });
     }
 
     listen(port, callback) {
